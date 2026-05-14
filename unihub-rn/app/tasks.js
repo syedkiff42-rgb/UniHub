@@ -9,21 +9,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/Colors';
 import { apiFetch } from '../constants/api';
 
-const FILTERS    = ['All', 'assignment', 'lab', 'study', 'fyp', 'quiz', 'other'];
+const FILTERS       = ['All', 'assignment', 'lab', 'study', 'fyp', 'quiz', 'other'];
 const FILTER_LABELS = { All: 'All', assignment: 'Assignment', lab: 'Lab', study: 'Study', fyp: 'FYP', quiz: 'Quiz', other: 'Other' };
-const PRI_COLORS = { High: Colors.accent3, Med: Colors.warn, Low: Colors.accent4 };
-const TYPE_COLORS = { assignment: Colors.accent, lab: Colors.accent2, study: Colors.accent4, fyp: Colors.accent3, quiz: Colors.warn, other: Colors.muted };
-
-const PRIORITIES = ['High', 'Med', 'Low'];
-const TASK_TYPES = ['assignment', 'lab', 'study', 'fyp', 'quiz', 'other'];
+const PRI_COLORS    = { High: Colors.accent3, Med: Colors.warn, Low: Colors.accent4 };
+const TYPE_COLORS   = { assignment: Colors.accent, lab: Colors.accent2, study: Colors.accent4, fyp: Colors.accent3, quiz: Colors.warn, other: Colors.muted };
+const PRIORITIES    = ['High', 'Med', 'Low'];
+const TASK_TYPES    = ['assignment', 'lab', 'study', 'fyp', 'quiz', 'other'];
 
 export default function TasksScreen() {
-  const [filter, setFilter]     = useState('All');
-  const [tasks, setTasks]       = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [filter, setFilter]         = useState('All');
+  const [tasks, setTasks]           = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal]   = useState(false);
   const [saving, setSaving]         = useState(false);
+  const [syncing, setSyncing]       = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null); // { count, last_sync, isDummy }
 
   const [form, setForm] = useState({
     title: '', course: '', course_code: '',
@@ -43,33 +44,60 @@ export default function TasksScreen() {
     }
   }, [filter]);
 
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const data = await apiFetch('/moodle/status');
+      setSyncStatus(data);
+    } catch (_) {}
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadSyncStatus(); }, [loadSyncStatus]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); load(); }, [load]);
 
-  async function handleToggle(id) {
-    // Optimistic update
-    setTasks(ts => ts.map(t => t.id === id ? { ...t, is_done: t.is_done ? 0 : 1 } : t));
+  async function handleMoodleSync() {
+    setSyncing(true);
     try {
-      await apiFetch(`/tasks/${id}/toggle`, { method: 'PATCH' });
+      const data = await apiFetch('/moodle/sync', { method: 'POST' });
+      setSyncStatus(s => ({ ...s, count: data.total, last_sync: new Date().toISOString(), isDummy: data.isDummy }));
+      load();
+      const note = data.isDummy ? '\n(Using demo data — connect Moodle API for live assignments)' : '';
+      Alert.alert('Moodle Synced', `${data.new} new · ${data.updated} updated${note}`);
     } catch (e) {
-      load(); // revert on error
+      Alert.alert('Sync Failed', e.message);
+    } finally {
+      setSyncing(false);
     }
   }
 
-  async function handleDelete(id) {
-    Alert.alert('Delete Task', 'Remove this task?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          try {
-            await apiFetch(`/tasks/${id}`, { method: 'DELETE' });
-            setTasks(ts => ts.filter(t => t.id !== id));
-          } catch (e) { Alert.alert('Error', e.message); }
+  async function handleToggle(id) {
+    setTasks(ts => ts.map(t => t.id === id ? { ...t, is_done: t.is_done ? 0 : 1 } : t));
+    try {
+      await apiFetch(`/tasks/${id}/toggle`, { method: 'PATCH' });
+    } catch (_) { load(); }
+  }
+
+  async function handleDelete(id, source) {
+    const isMoodle = source === 'moodle';
+    Alert.alert(
+      'Delete Task',
+      isMoodle
+        ? 'This task is synced from Moodle. Deleting it locally will not affect Moodle. Continue?'
+        : 'Remove this task?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiFetch(`/tasks/${id}`, { method: 'DELETE' });
+              setTasks(ts => ts.filter(t => t.id !== id));
+            } catch (e) { Alert.alert('Error', e.message); }
+          },
         },
-      },
-    ]);
+      ]
+    );
   }
 
   async function handleCreate() {
@@ -96,6 +124,13 @@ export default function TasksScreen() {
 
   function setField(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
+  function formatLastSync(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }) +
+      ' · ' + d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
@@ -103,7 +138,29 @@ export default function TasksScreen() {
         contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        <Text style={styles.title}>Tasks</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Tasks</Text>
+          <TouchableOpacity
+            style={[styles.syncBtn, syncing && { opacity: 0.6 }]}
+            onPress={handleMoodleSync} disabled={syncing} activeOpacity={0.8}
+          >
+            {syncing
+              ? <ActivityIndicator color="white" size="small" />
+              : <Text style={styles.syncBtnText}>⟳ Sync Moodle</Text>
+            }
+          </TouchableOpacity>
+        </View>
+
+        {/* Sync status bar */}
+        {syncStatus?.last_sync && (
+          <View style={styles.syncBar}>
+            <View style={[styles.syncDot, { backgroundColor: syncStatus.isDummy ? Colors.warn : Colors.accent4 }]} />
+            <Text style={styles.syncBarText}>
+              {syncStatus.isDummy ? 'Demo mode' : 'Live'} · {syncStatus.count} Moodle task{syncStatus.count !== 1 ? 's' : ''} · Last sync {formatLastSync(syncStatus.last_sync)}
+            </Text>
+          </View>
+        )}
 
         {/* Filters */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
@@ -127,16 +184,17 @@ export default function TasksScreen() {
           <View style={styles.emptyBox}>
             <Text style={styles.emptyIcon}>📋</Text>
             <Text style={styles.emptyText}>No tasks yet</Text>
-            <Text style={styles.emptyHint}>Tap + to add your first task</Text>
+            <Text style={styles.emptyHint}>Tap ⟳ Sync Moodle or + to add tasks</Text>
           </View>
         ) : (
           <View style={styles.taskList}>
             {tasks.map(t => {
               const typeColor = TYPE_COLORS[t.task_type] || Colors.accent;
+              const isMoodle  = t.source === 'moodle';
               return (
                 <TouchableOpacity
                   key={t.id} style={styles.taskCard}
-                  onLongPress={() => handleDelete(t.id)} activeOpacity={0.8}
+                  onLongPress={() => handleDelete(t.id, t.source)} activeOpacity={0.8}
                 >
                   <TouchableOpacity
                     style={[styles.check, t.is_done && styles.checkDone]}
@@ -144,10 +202,18 @@ export default function TasksScreen() {
                   >
                     {!!t.is_done && <Text style={styles.checkMark}>✓</Text>}
                   </TouchableOpacity>
+
                   <View style={styles.taskBody}>
-                    <Text style={[styles.taskTitle, t.is_done && styles.taskDone]} numberOfLines={2}>
-                      {t.title}
-                    </Text>
+                    <View style={styles.taskTitleRow}>
+                      <Text style={[styles.taskTitle, t.is_done && styles.taskDone]} numberOfLines={2}>
+                        {t.title}
+                      </Text>
+                      {isMoodle && (
+                        <View style={styles.moodleBadge}>
+                          <Text style={styles.moodleBadgeText}>Moodle</Text>
+                        </View>
+                      )}
+                    </View>
                     <View style={styles.taskMeta}>
                       {t.course_code && (
                         <View style={[styles.courseTag, { backgroundColor: `${typeColor}22` }]}>
@@ -186,14 +252,12 @@ export default function TasksScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Title */}
               <View style={styles.mField}>
                 <Text style={styles.mLabel}>Task Title *</Text>
                 <TextInput style={styles.mInput} placeholder="e.g. Assignment 2 – Dynamic Programming"
                   placeholderTextColor={Colors.muted} value={form.title} onChangeText={v => setField('title', v)} />
               </View>
 
-              {/* Course */}
               <View style={styles.mRow}>
                 <View style={[styles.mField, { flex: 1 }]}>
                   <Text style={styles.mLabel}>Course Name</Text>
@@ -208,14 +272,12 @@ export default function TasksScreen() {
                 </View>
               </View>
 
-              {/* Due Date */}
               <View style={styles.mField}>
                 <Text style={styles.mLabel}>Due Date (YYYY-MM-DD)</Text>
                 <TextInput style={styles.mInput} placeholder="2026-05-30" placeholderTextColor={Colors.muted}
                   value={form.due_date} onChangeText={v => setField('due_date', v)} />
               </View>
 
-              {/* Type */}
               <View style={styles.mField}>
                 <Text style={styles.mLabel}>Type</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
@@ -232,7 +294,6 @@ export default function TasksScreen() {
                 </ScrollView>
               </View>
 
-              {/* Priority */}
               <View style={styles.mField}>
                 <Text style={styles.mLabel}>Priority</Text>
                 <View style={styles.priRow}>
@@ -260,15 +321,35 @@ export default function TasksScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
-  title: { fontSize: 28, fontWeight: '800', color: Colors.text, padding: 22, paddingBottom: 14 },
 
-  filterRow: { paddingHorizontal: 22, gap: 8, paddingBottom: 8 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 22, paddingTop: 18, paddingBottom: 10,
+  },
+  title: { fontSize: 28, fontWeight: '800', color: Colors.text },
+  syncBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.accent2, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 8,
+  },
+  syncBtnText: { color: 'white', fontSize: 13, fontWeight: '700' },
+
+  syncBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: 22, marginBottom: 10,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  syncDot:     { width: 7, height: 7, borderRadius: 99 },
+  syncBarText: { fontSize: 11, color: Colors.muted, flex: 1 },
+
+  filterRow: { paddingHorizontal: 22, gap: 8, paddingBottom: 12 },
   filterChip: {
     paddingVertical: 6, paddingHorizontal: 16, borderRadius: 99,
     borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface,
   },
   filterChipActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  filterText: { fontSize: 12, fontWeight: '500', color: Colors.muted },
+  filterText:       { fontSize: 12, fontWeight: '500', color: Colors.muted },
   filterTextActive: { color: 'white' },
 
   emptyBox: { alignItems: 'center', paddingVertical: 60 },
@@ -276,7 +357,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 15, fontWeight: '600', color: Colors.text, marginBottom: 4 },
   emptyHint: { fontSize: 12, color: Colors.muted },
 
-  taskList: { padding: 22, gap: 10 },
+  taskList: { paddingHorizontal: 22, gap: 10 },
   taskCard: {
     backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
     borderRadius: 18, padding: 16, flexDirection: 'row', gap: 14, alignItems: 'flex-start',
@@ -288,14 +369,23 @@ const styles = StyleSheet.create({
   },
   checkDone: { backgroundColor: Colors.accent4, borderColor: Colors.accent4 },
   checkMark: { color: Colors.bg, fontSize: 13, fontWeight: '800' },
+
   taskBody: { flex: 1 },
-  taskTitle: { fontSize: 14, fontWeight: '500', color: Colors.text, marginBottom: 6 },
-  taskDone: { textDecorationLine: 'line-through', color: Colors.muted },
-  taskMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  courseTag: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 99 },
+  taskTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 6 },
+  taskTitle:    { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.text },
+  taskDone:     { textDecorationLine: 'line-through', color: Colors.muted },
+
+  moodleBadge: {
+    backgroundColor: `${Colors.accent2}22`, borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start',
+  },
+  moodleBadgeText: { fontSize: 9, fontWeight: '800', color: Colors.accent2, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  taskMeta:      { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  courseTag:     { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 99 },
   courseTagText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  taskDue: { fontSize: 11, color: Colors.muted },
-  taskPri: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6, marginLeft: 'auto' },
+  taskDue:       { fontSize: 11, color: Colors.muted },
+  taskPri:       { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6, marginLeft: 'auto' },
 
   fab: {
     position: 'absolute', bottom: 20, right: 24,
@@ -313,35 +403,26 @@ const styles = StyleSheet.create({
     padding: 24, maxHeight: '90%',
   },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: Colors.text },
-  modalClose: { fontSize: 18, color: Colors.muted, padding: 4 },
+  modalTitle:  { fontSize: 20, fontWeight: '800', color: Colors.text },
+  modalClose:  { fontSize: 18, color: Colors.muted, padding: 4 },
 
   mField: { marginBottom: 16 },
-  mRow: { flexDirection: 'row' },
+  mRow:   { flexDirection: 'row' },
   mLabel: { fontSize: 11, fontWeight: '700', color: Colors.text, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
   mInput: {
     backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border,
     borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 14, color: Colors.text,
   },
 
-  chip: {
-    paddingVertical: 7, paddingHorizontal: 14, borderRadius: 99,
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.bg,
-  },
-  chipActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  chipText: { fontSize: 12, fontWeight: '600', color: Colors.muted },
+  chip:         { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.bg },
+  chipActive:   { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  chipText:     { fontSize: 12, fontWeight: '600', color: Colors.muted },
   chipTextActive: { color: 'white' },
 
   priRow: { flexDirection: 'row', gap: 10 },
-  priBtn: {
-    flex: 1, height: 40, borderRadius: 10, borderWidth: 1.5,
-    borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
-  },
+  priBtn: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
   priBtnText: { fontSize: 13, fontWeight: '700', color: Colors.muted },
 
-  saveBtn: {
-    backgroundColor: Colors.accent, borderRadius: 14,
-    height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 8,
-  },
+  saveBtn:     { backgroundColor: Colors.accent, borderRadius: 14, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 8 },
   saveBtnText: { color: 'white', fontSize: 16, fontWeight: '800' },
 });

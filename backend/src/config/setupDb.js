@@ -20,8 +20,33 @@ async function setup() {
     'utf8'
   );
 
-  await conn.query(sql);
+  // Run each statement individually so duplicate index/column errors are skipped
+  const IGNORE_CODES = new Set(['ER_DUP_KEYNAME', 'ER_DUP_FIELDNAME', 'ER_TABLE_EXISTS_ERROR']);
+  const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+  for (const stmt of statements) {
+    try {
+      await conn.query(stmt);
+    } catch (e) {
+      if (!IGNORE_CODES.has(e.code)) throw e;
+    }
+  }
   console.log('✅ Database and tables created successfully.');
+
+  // ── Column migrations (safe to re-run; ignored if column already exists) ──
+  const migrations = [
+    `ALTER TABLE tasks ADD COLUMN source ENUM('manual','moodle') DEFAULT 'manual'`,
+    `ALTER TABLE tasks ADD COLUMN moodle_id VARCHAR(100) DEFAULT NULL`,
+    `ALTER TABLE tasks ADD COLUMN moodle_synced_at TIMESTAMP NULL DEFAULT NULL`,
+  ];
+  for (const sql of migrations) {
+    try {
+      await conn.query(sql);
+    } catch (e) {
+      if (e.code !== 'ER_DUP_FIELDNAME') throw e; // ignore "column already exists"
+    }
+  }
+  console.log('✅ Migrations applied.');
+
   await conn.end();
 }
 

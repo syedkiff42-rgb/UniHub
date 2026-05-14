@@ -78,20 +78,23 @@ CREATE TABLE IF NOT EXISTS schedule_events (
 -- TASKS (Module 5 – Task Management)
 -- ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tasks (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  user_id     INT                 NOT NULL,
-  title       VARCHAR(255)        NOT NULL,
-  course      VARCHAR(60)         DEFAULT NULL,
-  course_code VARCHAR(20)         DEFAULT NULL,
-  task_type   ENUM('assignment','lab','study','fyp','personal','quiz','other')
-                                  DEFAULT 'other',
-  priority    ENUM('High','Med','Low')
-                                  DEFAULT 'Med',
-  due_date    DATE                DEFAULT NULL,
-  is_done     TINYINT(1)          DEFAULT 0,
-  notes       TEXT                DEFAULT NULL,
-  created_at  TIMESTAMP           DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMP           DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  user_id           INT                 NOT NULL,
+  title             VARCHAR(255)        NOT NULL,
+  course            VARCHAR(60)         DEFAULT NULL,
+  course_code       VARCHAR(20)         DEFAULT NULL,
+  task_type         ENUM('assignment','lab','study','fyp','personal','quiz','other')
+                                        DEFAULT 'other',
+  priority          ENUM('High','Med','Low')
+                                        DEFAULT 'Med',
+  due_date          DATE                DEFAULT NULL,
+  is_done           TINYINT(1)          DEFAULT 0,
+  notes             TEXT                DEFAULT NULL,
+  source            ENUM('manual','moodle') DEFAULT 'manual',
+  moodle_id         VARCHAR(100)        DEFAULT NULL,
+  moodle_synced_at  TIMESTAMP           NULL DEFAULT NULL,
+  created_at        TIMESTAMP           DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMP           DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

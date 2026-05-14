@@ -12,6 +12,7 @@ const pdfRoutes      = require('./routes/pdf');
 const gpaRoutes      = require('./routes/gpa');
 const scheduleRoutes = require('./routes/schedule');
 const tasksRoutes    = require('./routes/tasks');
+const moodleRoutes   = require('./routes/moodle');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +57,7 @@ app.use('/api/pdf',      pdfRoutes);
 app.use('/api/gpa',      gpaRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/tasks',    tasksRoutes);
+app.use('/api/moodle',   moodleRoutes);
 
 // ── 404 handler ───────────────────────────────────────────────────
 app.use((_req, res) => {

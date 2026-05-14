@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View, Text, ScrollView, StyleSheet,
   TouchableOpacity, Switch, Alert, ActivityIndicator,
@@ -58,7 +59,7 @@ export default function ProfileScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function handleLogout() {
     Alert.alert('Log Out', 'Are you sure you want to sign out?', [

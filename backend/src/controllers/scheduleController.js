@@ -154,7 +154,7 @@ async function getDashboard(req, res) {
     );
 
     const [upcoming] = await db.query(
-      `SELECT id, title, course, course_code, task_type, priority,
+      `SELECT id, title, course, course_code, task_type, priority, source,
               due_date, DATEDIFF(due_date, CURDATE()) AS days_left
        FROM tasks
        WHERE user_id = ? AND is_done = 0 AND due_date >= CURDATE()
