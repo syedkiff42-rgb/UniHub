@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables (contains secrets)
+.env
+**/.env
+
+# Uploaded files
+backend/uploads/
+
+# Build output
+.expo/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Lock files (optional — keeping package-lock.json)
