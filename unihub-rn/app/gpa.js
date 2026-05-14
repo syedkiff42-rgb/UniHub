@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View, Text, ScrollView, StyleSheet,
   TouchableOpacity, Modal, TextInput,
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../constants/Colors';
 import { apiFetch } from '../constants/api';
 
@@ -36,6 +38,8 @@ export default function GPAScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const token = await AsyncStorage.getItem('unihub_token');
+      if (!token) { setLoading(false); return; }
       const data = await apiFetch('/gpa/summary');
       setCourses(data.courses || []);
       setCgpa(data.cgpa);
@@ -47,7 +51,7 @@ export default function GPAScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function handleAddCourse() {
     if (!courseForm.course_name.trim()) return Alert.alert('Required', 'Course name is required.');

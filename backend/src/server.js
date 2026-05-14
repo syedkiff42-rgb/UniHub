@@ -83,9 +83,12 @@ app.use((err, _req, res, _next) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 UniHub API running on http://localhost:${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+process.on('SIGTERM', () => server.close());
+process.on('SIGINT',  () => server.close());
 
 module.exports = app;

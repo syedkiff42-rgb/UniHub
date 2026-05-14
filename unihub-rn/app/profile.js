@@ -43,6 +43,9 @@ export default function ProfileScreen() {
 
   const load = useCallback(async () => {
     try {
+      const token = await AsyncStorage.getItem('unihub_token');
+      if (!token) { setLoading(false); return; }
+
       const raw = await AsyncStorage.getItem('unihub_user');
       if (raw) setUser(JSON.parse(raw));
 

@@ -126,9 +126,29 @@ async function getClash(req, res) {
       byDate[key].push(item);
     }
 
+    const PRIORITY_RANK = { Low: 1, Med: 2, High: 3 };
+
     const clashes = Object.entries(byDate)
       .filter(([, items]) => items.length >= 2)
-      .map(([date, items]) => ({ date, count: items.length, items }))
+      .map(([date, items]) => {
+        // Pick the lowest-priority task to suggest completing early
+        const taskItems = items.filter(i => i.source === 'task');
+        let suggestion = null;
+        if (taskItems.length >= 1) {
+          const pick = [...taskItems].sort(
+            (a, b) => (PRIORITY_RANK[a.priority] || 2) - (PRIORITY_RANK[b.priority] || 2)
+          )[0];
+          const target = new Date(date);
+          target.setDate(target.getDate() - 2);
+          suggestion = {
+            task_id:     pick.id,
+            title:       pick.title,
+            course:      pick.course || pick.course_code || null,
+            target_date: target.toISOString().split('T')[0],
+          };
+        }
+        return { date, count: items.length, items, suggestion };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
 
     return res.json({ success: true, clashes });

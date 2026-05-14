@@ -74,6 +74,9 @@ export default function DashboardScreen() {
 
   const load = useCallback(async () => {
     try {
+      const token = await AsyncStorage.getItem('unihub_token');
+      if (!token) { setLoading(false); return; }
+
       const raw = await AsyncStorage.getItem('unihub_user');
       if (raw) setUser(JSON.parse(raw));
 
@@ -205,11 +208,25 @@ export default function DashboardScreen() {
             <Text style={styles.alertIcon}>⚡</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.alertTitle}>
-                Clash Alert – {new Date(firstClash.date).toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' })}
+                Clash Alert – {new Date(firstClash.date + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' })}
               </Text>
               <Text style={styles.alertSub}>
-                {firstClash.count} deadlines detected. Consider early submissions.
+                {firstClash.count} deadlines on the same day.
               </Text>
+              {firstClash.suggestion && (
+                <View style={styles.suggestionRow}>
+                  <Text style={styles.suggestionIcon}>💡</Text>
+                  <Text style={styles.suggestionText}>
+                    Complete{firstClash.suggestion.course ? ` "${firstClash.suggestion.course}"` : ''}{' '}
+                    <Text style={styles.suggestionTask}>"{firstClash.suggestion.title}"</Text>
+                    {' '}by{' '}
+                    <Text style={styles.suggestionDate}>
+                      {new Date(firstClash.suggestion.target_date + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                    </Text>
+                    {' '}to reduce workload on clash day.
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -321,7 +338,13 @@ const styles = StyleSheet.create({
   },
   alertIcon:  { fontSize: 22 },
   alertTitle: { fontWeight: '700', fontSize: 14, color: '#ff7a6b', marginBottom: 3 },
-  alertSub:   { fontSize: 12, color: Colors.muted },
+  alertSub:   { fontSize: 12, color: Colors.muted, marginBottom: 6 },
+
+  suggestionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 2 },
+  suggestionIcon: { fontSize: 12, marginTop: 1 },
+  suggestionText: { flex: 1, fontSize: 12, color: Colors.muted, lineHeight: 18 },
+  suggestionTask: { fontWeight: '700', color: Colors.text },
+  suggestionDate: { fontWeight: '700', color: Colors.accent4 },
 
   sectionHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
