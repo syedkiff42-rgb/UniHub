@@ -25,18 +25,6 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- ─────────────────────────────────────────
--- REFRESH TOKENS (for secure JWT rotation)
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS refresh_tokens (
-  id           INT AUTO_INCREMENT PRIMARY KEY,
-  user_id      INT                 NOT NULL,
-  token        VARCHAR(512)        NOT NULL,
-  expires_at   DATETIME            NOT NULL,
-  created_at   TIMESTAMP           DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- ─────────────────────────────────────────
 -- PDF UPLOADS (Module 3 – PDF Parsing)
 -- ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pdf_uploads (

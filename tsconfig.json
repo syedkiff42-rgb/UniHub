@@ -1,6 +1,6 @@
 {
   "compilerOptions": {},
-  "extends": "expo/tsconfig.base",
+  "extends": "./unihub-rn/node_modules/expo/tsconfig.base",
   "include": [
     "**/*.ts",
     "**/*.tsx",
