@@ -2,7 +2,7 @@
 
 **UniHub: A Unified Academic Data Integrator for Automated Schedule & Task Management**
 
-> FYP1 · UITM · March 2026  
+> FYP1 · UniKL · March 2026  
 > Syed Muhammad Zulkifli Syed Alfian (52213224368)  
 > Nursyafiqa Tasya Mona Mohidi (52213124274)  
 > Supervisor: Azrai bin Abdul Aziz
@@ -16,18 +16,14 @@ unihub-project/
 ├── unihub-rn/          ← React Native (Expo) mobile app
 │   ├── app/
 │   │   ├── _layout.js       ← Root layout with auth guard
-│   │   ├── login.js         ← Module 1: Login screen  ← NEW
-│   │   ├── register.js      ← Module 1: Register screen  ← NEW
-│   │   ├── pdf-upload.js    ← Module 3: PDF upload UI  ← NEW
-│   │   ├── index.js         ← Dashboard (Home tab)
+│   │   ├── login.js         ← Module 1: Login screen│   │   ├── register.js      ← Module 1: Register screen│   │   ├── pdf-upload.js    ← Module 3: PDF upload UI│   │   ├── index.js         ← Dashboard (Home tab)
 │   │   ├── schedule.js      ← Schedule tab
 │   │   ├── tasks.js         ← Tasks tab
 │   │   ├── gpa.js           ← GPA tab
 │   │   └── profile.js       ← Profile tab
 │   └── constants/
 │       ├── Colors.js
-│       └── Config.js        ← API base URL  ← NEW
-│
+│       └── Config.js        ← API base URL│
 ├── backend/             ← Node.js / Express API
 │   ├── src/
 │   │   ├── server.js        ← Entry point
@@ -169,7 +165,6 @@ All require `Authorization: Bearer <token>`.
 | Table | Purpose |
 |-------|---------|
 | `users` | Student accounts |
-| `refresh_tokens` | JWT token management |
 | `pdf_uploads` | Upload history + parse status |
 | `schedule_events` | Extracted events from PDFs |
 | `tasks` | Manual task management |
