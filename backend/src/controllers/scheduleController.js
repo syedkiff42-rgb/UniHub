@@ -119,9 +119,8 @@ async function getClash(req, res) {
     const byDate = {};
     for (const item of [...tasks, ...events]) {
       if (!item.date) continue;
-      const key = item.date instanceof Date
-        ? item.date.toISOString().split('T')[0]
-        : String(item.date).split('T')[0];
+      const d   = item.date instanceof Date ? item.date : new Date(item.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       if (!byDate[key]) byDate[key] = [];
       byDate[key].push(item);
     }
@@ -140,11 +139,14 @@ async function getClash(req, res) {
           )[0];
           const target = new Date(date);
           target.setDate(target.getDate() - 2);
+          const ty = target.getFullYear();
+          const tm = String(target.getMonth()+1).padStart(2,'0');
+          const td = String(target.getDate()).padStart(2,'0');
           suggestion = {
             task_id:     pick.id,
             title:       pick.title,
             course:      pick.course || pick.course_code || null,
-            target_date: target.toISOString().split('T')[0],
+            target_date: `${ty}-${tm}-${td}`,
           };
         }
         return { date, count: items.length, items, suggestion };
