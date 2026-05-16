@@ -34,6 +34,10 @@ export default function GPAScreen() {
 
   const [courseForm, setCourseForm] = useState({ course_code: '', course_name: '', credit_hours: '3', semester: '' });
   const [assessForm, setAssessForm] = useState({ name: '', weight: '', score: '', max_score: '100' });
+  const [courseMode, setCourseMode] = useState('detailed'); // 'detailed' | 'direct'
+  const [directGrade, setDirectGrade] = useState('');
+
+  const GRADES = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'D', 'F'];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,6 +59,7 @@ export default function GPAScreen() {
 
   async function handleAddCourse() {
     if (!courseForm.course_name.trim()) return Alert.alert('Required', 'Course name is required.');
+    if (courseMode === 'direct' && !directGrade) return Alert.alert('Required', 'Please select a grade.');
     setSaving(true);
     try {
       await apiFetch('/gpa/courses', {
@@ -64,10 +69,13 @@ export default function GPAScreen() {
           course_name:  courseForm.course_name.trim(),
           credit_hours: parseInt(courseForm.credit_hours) || 3,
           semester:     courseForm.semester.trim(),
+          direct_grade: courseMode === 'direct' ? directGrade : null,
         }),
       });
       setShowCourseModal(false);
       setCourseForm({ course_code: '', course_name: '', credit_hours: '3', semester: '' });
+      setCourseMode('detailed');
+      setDirectGrade('');
       load();
     } catch (e) { Alert.alert('Error', e.message); }
     finally { setSaving(false); }
@@ -180,41 +188,50 @@ export default function GPAScreen() {
                   <Text style={[styles.courseGrade, { color: gradeClr }]}>{c.grade || '—'}</Text>
                 </TouchableOpacity>
 
-                {c.totalPct !== null && (
+                {c.direct_grade ? (
+                  <Text style={styles.progressPct}>Direct Grade  ·  GP {c.gradePoint?.toFixed(2)}</Text>
+                ) : c.totalPct !== null ? (
                   <>
                     <View style={styles.progressTrack}>
                       <View style={[styles.progressFill, { width: `${Math.min(c.totalPct, 100)}%`, backgroundColor: color }]} />
                     </View>
                     <Text style={styles.progressPct}>{c.totalPct.toFixed(1)}%  ·  GP {c.gradePoint?.toFixed(2)}</Text>
                   </>
-                )}
+                ) : null}
 
-                {/* Expanded: assessments */}
+                {/* Expanded section */}
                 {expanded && (
                   <View style={styles.assessSection}>
-                    <View style={styles.assessHeader}>
-                      <Text style={styles.assessTitle}>Assessments</Text>
-                      <TouchableOpacity onPress={() => { setSelectedCourse(c); setShowAssessModal(true); }}>
-                        <Text style={styles.addBtn}>+ Add Mark</Text>
-                      </TouchableOpacity>
-                    </View>
-                    {c.assessments?.length === 0 && (
-                      <Text style={styles.noAssess}>No marks added yet</Text>
-                    )}
-                    {c.assessments?.map(a => (
-                      <View key={a.id} style={styles.assessRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.assessName}>{a.name}</Text>
-                          <Text style={styles.assessWeight}>Weight: {a.weight}%</Text>
+                    {c.direct_grade ? (
+                      // Direct grade mode — no assessments
+                      <Text style={styles.noAssess}>Grade entered directly — no assessment breakdown.</Text>
+                    ) : (
+                      <>
+                        <View style={styles.assessHeader}>
+                          <Text style={styles.assessTitle}>Assessments</Text>
+                          <TouchableOpacity onPress={() => { setSelectedCourse(c); setShowAssessModal(true); }}>
+                            <Text style={styles.addBtn}>+ Add Mark</Text>
+                          </TouchableOpacity>
                         </View>
-                        <Text style={styles.assessScore}>
-                          {a.score !== null ? `${a.score}/${a.max_score}` : '—'}
-                        </Text>
-                        <TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteAssessment(a.id)}>
-                          <Text style={styles.delBtnText}>✕</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
+                        {c.assessments?.length === 0 && (
+                          <Text style={styles.noAssess}>No marks added yet</Text>
+                        )}
+                        {c.assessments?.map(a => (
+                          <View key={a.id} style={styles.assessRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.assessName}>{a.name}</Text>
+                              <Text style={styles.assessWeight}>Weight: {a.weight}%</Text>
+                            </View>
+                            <Text style={styles.assessScore}>
+                              {a.score !== null ? `${a.score}/${a.max_score}` : '—'}
+                            </Text>
+                            <TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteAssessment(a.id)}>
+                              <Text style={styles.delBtnText}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </>
+                    )}
                     <TouchableOpacity style={styles.deleteCourseBtn} onPress={() => handleDeleteCourse(c.id)}>
                       <Text style={styles.deleteCourseBtnText}>Delete Course</Text>
                     </TouchableOpacity>
@@ -233,11 +250,28 @@ export default function GPAScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Course</Text>
-              <TouchableOpacity onPress={() => setShowCourseModal(false)}><Text style={styles.modalClose}>✕</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowCourseModal(false); setCourseMode('detailed'); setDirectGrade(''); }}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
             </View>
+
+            {/* Mode Toggle */}
+            <View style={styles.modeToggle}>
+              {['detailed', 'direct'].map(m => (
+                <TouchableOpacity
+                  key={m} style={[styles.modeBtn, courseMode === m && styles.modeBtnActive]}
+                  onPress={() => { setCourseMode(m); setDirectGrade(''); }} activeOpacity={0.8}
+                >
+                  <Text style={[styles.modeBtnText, courseMode === m && styles.modeBtnTextActive]}>
+                    {m === 'detailed' ? 'By Assessments' : 'Direct Grade'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {[
               { key: 'course_name', label: 'Course Name *', placeholder: 'Data Structures & Algorithms' },
-              { key: 'course_code', label: 'Course Code *', placeholder: 'CSC3534' },
+              { key: 'course_code', label: 'Course Code',   placeholder: 'CSC3534' },
               { key: 'credit_hours', label: 'Credit Hours', placeholder: '3', keyboardType: 'numeric' },
               { key: 'semester', label: 'Semester', placeholder: 'March 2026' },
             ].map(f => (
@@ -254,6 +288,24 @@ export default function GPAScreen() {
                 />
               </View>
             ))}
+
+            {/* Grade Picker — only in direct mode */}
+            {courseMode === 'direct' && (
+              <View style={styles.mField}>
+                <Text style={styles.mLabel}>Final Grade *</Text>
+                <View style={styles.gradePicker}>
+                  {GRADES.map(g => (
+                    <TouchableOpacity
+                      key={g} style={[styles.gradeBtn, directGrade === g && styles.gradeBtnActive]}
+                      onPress={() => setDirectGrade(g)} activeOpacity={0.8}
+                    >
+                      <Text style={[styles.gradeBtnText, directGrade === g && styles.gradeBtnTextActive]}>{g}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleAddCourse} disabled={saving}>
               {saving ? <ActivityIndicator color="white" /> : <Text style={styles.saveBtnText}>Add Course</Text>}
             </TouchableOpacity>
@@ -377,4 +429,22 @@ const styles = StyleSheet.create({
     height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 8,
   },
   saveBtnText: { color: 'white', fontSize: 16, fontWeight: '800' },
+
+  modeToggle: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+  modeBtn: {
+    flex: 1, height: 38, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 10, borderWidth: 1.5, borderColor: Colors.border,
+  },
+  modeBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  modeBtnText: { fontSize: 12, fontWeight: '700', color: Colors.muted },
+  modeBtnTextActive: { color: 'white' },
+
+  gradePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gradeBtn: {
+    width: 46, height: 40, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 10, borderWidth: 1.5, borderColor: Colors.border,
+  },
+  gradeBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  gradeBtnText: { fontSize: 13, fontWeight: '700', color: Colors.muted },
+  gradeBtnTextActive: { color: 'white' },
 });

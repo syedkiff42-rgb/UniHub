@@ -220,6 +220,9 @@ async function bulkAddTimetableSlots(req, res) {
       return res.status(400).json({ success: false, message: 'slots array is required' });
     }
 
+    // Clear existing slots for this user before inserting new ones
+    await db.query('DELETE FROM timetable_slots WHERE user_id = ?', [req.user.id]);
+
     const rows = slots.map((s, idx) => [
       req.user.id,
       s.course_name  || 'Unknown Course',

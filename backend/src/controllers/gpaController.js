@@ -13,6 +13,11 @@ function gradeFromPct(pct) {
   return { grade: 'F', gp: 0.00 };
 }
 
+function gpFromGrade(grade) {
+  const map = { 'A': 4.00, 'A-': 3.67, 'B+': 3.33, 'B': 3.00, 'B-': 2.67, 'C+': 2.33, 'C': 2.00, 'D': 1.00, 'F': 0.00 };
+  return map[grade] ?? null;
+}
+
 // GET /api/gpa/summary
 async function getSummary(req, res) {
   try {
@@ -26,6 +31,24 @@ async function getSummary(req, res) {
     const courseDetails = [];
 
     for (const c of courses) {
+      // Direct grade mode — no assessments needed
+      if (c.direct_grade) {
+        const gp = gpFromGrade(c.direct_grade);
+        if (gp !== null) {
+          totalGP += gp * c.credit_hours;
+          totalCH += c.credit_hours;
+        }
+        courseDetails.push({
+          ...c,
+          assessments: [],
+          totalPct:    null,
+          grade:       c.direct_grade,
+          gradePoint:  gp,
+        });
+        continue;
+      }
+
+      // Assessment mode — calculate from individual assessments
       const [assessments] = await db.query(
         'SELECT * FROM gpa_assessments WHERE gpa_course_id = ? ORDER BY created_at ASC',
         [c.id]
@@ -78,14 +101,14 @@ async function getSummary(req, res) {
 // POST /api/gpa/courses
 async function addCourse(req, res) {
   try {
-    const { course_code, course_name, credit_hours, semester } = req.body;
+    const { course_code, course_name, credit_hours, semester, direct_grade } = req.body;
     if (!course_name) {
       return res.status(400).json({ success: false, message: 'Course name is required' });
     }
     const [result] = await db.query(
-      `INSERT INTO gpa_courses (user_id, course_code, course_name, credit_hours, semester)
-       VALUES (?, ?, ?, ?, ?)`,
-      [req.user.id, course_code || null, course_name, credit_hours || 3, semester || null]
+      `INSERT INTO gpa_courses (user_id, course_code, course_name, credit_hours, semester, direct_grade)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [req.user.id, course_code || null, course_name, credit_hours || 3, semester || null, direct_grade || null]
     );
     return res.status(201).json({ success: true, id: result.insertId, message: 'Course added' });
   } catch (err) {

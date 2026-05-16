@@ -37,6 +37,7 @@ async function setup() {
     `ALTER TABLE tasks ADD COLUMN source ENUM('manual','moodle') DEFAULT 'manual'`,
     `ALTER TABLE tasks ADD COLUMN moodle_id VARCHAR(100) DEFAULT NULL`,
     `ALTER TABLE tasks ADD COLUMN moodle_synced_at TIMESTAMP NULL DEFAULT NULL`,
+    `ALTER TABLE gpa_courses ADD COLUMN direct_grade VARCHAR(3) DEFAULT NULL`,
   ];
   for (const sql of migrations) {
     try {
