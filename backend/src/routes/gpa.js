@@ -7,6 +7,7 @@ router.use(authMw);
 router.get('/summary',                          gpaCtrl.getSummary);
 router.post('/courses',                         gpaCtrl.addCourse);
 router.put('/courses/:id',                      gpaCtrl.updateCourse);
+router.patch('/courses/:id/grade',              gpaCtrl.setCourseGrade);
 router.delete('/courses/:id',                   gpaCtrl.deleteCourse);
 router.post('/courses/:courseId/assessments',   gpaCtrl.addAssessment);
 router.put('/assessments/:id',                  gpaCtrl.updateAssessment);

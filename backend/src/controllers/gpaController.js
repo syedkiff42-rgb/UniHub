@@ -1,5 +1,11 @@
 const db = require('../config/db');
 
+const GRADE_TARGETS = [
+  { grade: 'A',  min: 80 }, { grade: 'A-', min: 75 }, { grade: 'B+', min: 70 },
+  { grade: 'B',  min: 65 }, { grade: 'B-', min: 60 }, { grade: 'C+', min: 55 },
+  { grade: 'C',  min: 50 }, { grade: 'D',  min: 45 },
+];
+
 // Malaysian grading scale (common public university scale)
 function gradeFromPct(pct) {
   if (pct >= 80) return { grade: 'A',  gp: 4.00 };
@@ -31,24 +37,7 @@ async function getSummary(req, res) {
     const courseDetails = [];
 
     for (const c of courses) {
-      // Direct grade mode — no assessments needed
-      if (c.direct_grade) {
-        const gp = gpFromGrade(c.direct_grade);
-        if (gp !== null) {
-          totalGP += gp * c.credit_hours;
-          totalCH += c.credit_hours;
-        }
-        courseDetails.push({
-          ...c,
-          assessments: [],
-          totalPct:    null,
-          grade:       c.direct_grade,
-          gradePoint:  gp,
-        });
-        continue;
-      }
-
-      // Assessment mode — calculate from individual assessments
+      // Always fetch assessments regardless of mode
       const [assessments] = await db.query(
         'SELECT * FROM gpa_assessments WHERE gpa_course_id = ? ORDER BY created_at ASC',
         [c.id]
@@ -65,22 +54,47 @@ async function getSummary(req, res) {
         }
       }
 
-      let totalPct  = null;
-      let gradeInfo = null;
+      let totalPct    = totalWeight > 0 ? weightedScore / totalWeight : null;
+      let calcGrade   = totalPct !== null ? gradeFromPct(totalPct) : null;
 
-      if (totalWeight > 0) {
-        totalPct  = weightedScore / totalWeight;
-        gradeInfo = gradeFromPct(totalPct);
-        totalGP  += gradeInfo.gp * c.credit_hours;
-        totalCH  += c.credit_hours;
+      // direct_grade overrides assessment calculation for CGPA
+      let grade      = null;
+      let gradePoint = null;
+      if (c.direct_grade) {
+        const gp = gpFromGrade(c.direct_grade);
+        grade = c.direct_grade;
+        gradePoint = gp;
+        if (gp !== null) { totalGP += gp * c.credit_hours; totalCH += c.credit_hours; }
+      } else if (calcGrade) {
+        grade = calcGrade.grade;
+        gradePoint = calcGrade.gp;
+        totalGP += calcGrade.gp * c.credit_hours;
+        totalCH += c.credit_hours;
+      }
+
+      // Required calculator — only when no direct_grade override and some weight scored
+      let required = null;
+      if (!c.direct_grade && totalWeight > 0) {
+        const enteredPoints   = weightedScore / 100;
+        const remainingWeight = Math.round((100 - totalWeight) * 10) / 10;
+        if (remainingWeight > 0) {
+          for (const t of GRADE_TARGETS) {
+            const needed = (t.min - enteredPoints) * 100 / remainingWeight;
+            if (needed <= 100) {
+              required = { grade: t.grade, needed: Math.round(needed * 10) / 10, remainingWeight };
+              break;
+            }
+          }
+        }
       }
 
       courseDetails.push({
         ...c,
         assessments,
         totalPct:   totalPct !== null ? Math.round(totalPct * 10) / 10 : null,
-        grade:      gradeInfo?.grade      ?? null,
-        gradePoint: gradeInfo?.gp         ?? null,
+        grade,
+        gradePoint,
+        required,
       });
     }
 
@@ -133,6 +147,25 @@ async function updateCourse(req, res) {
     return res.json({ success: true, message: 'Course updated' });
   } catch (err) {
     console.error('updateCourse error:', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+}
+
+// PATCH /api/gpa/courses/:id/grade  — set or clear direct_grade override
+async function setCourseGrade(req, res) {
+  try {
+    const { id } = req.params;
+    const { direct_grade } = req.body;
+    const [result] = await db.query(
+      'UPDATE gpa_courses SET direct_grade=? WHERE id=? AND user_id=?',
+      [direct_grade || null, id, req.user.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Course not found' });
+    }
+    return res.json({ success: true, message: 'Grade updated' });
+  } catch (err) {
+    console.error('setCourseGrade error:', err);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 }
@@ -224,6 +257,6 @@ async function deleteAssessment(req, res) {
 }
 
 module.exports = {
-  getSummary, addCourse, updateCourse, deleteCourse,
+  getSummary, addCourse, updateCourse, deleteCourse, setCourseGrade,
   addAssessment, updateAssessment, deleteAssessment,
 };

@@ -124,6 +124,17 @@ export default function GPAScreen() {
     } catch (e) { Alert.alert('Error', e.message); }
   }
 
+  async function handleSetFinalGrade(courseId, grade, currentGrade) {
+    const newGrade = grade === currentGrade ? null : grade;
+    try {
+      await apiFetch(`/gpa/courses/${courseId}/grade`, {
+        method: 'PATCH',
+        body: JSON.stringify({ direct_grade: newGrade }),
+      });
+      load();
+    } catch (e) { Alert.alert('Error', e.message); }
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -195,7 +206,7 @@ export default function GPAScreen() {
                 </TouchableOpacity>
 
                 {c.direct_grade ? (
-                  <Text style={styles.progressPct}>Direct Grade  ·  GP {c.gradePoint?.toFixed(2)}</Text>
+                  <Text style={styles.progressPct}>Final Grade Override  ·  GP {c.gradePoint?.toFixed(2)}</Text>
                 ) : c.totalPct !== null ? (
                   <>
                     <View style={styles.progressTrack}>
@@ -208,36 +219,66 @@ export default function GPAScreen() {
                 {/* Expanded section */}
                 {expanded && (
                   <View style={styles.assessSection}>
-                    {c.direct_grade ? (
-                      // Direct grade mode — no assessments
-                      <Text style={styles.noAssess}>Grade entered directly — no assessment breakdown.</Text>
-                    ) : (
-                      <>
-                        <View style={styles.assessHeader}>
-                          <Text style={styles.assessTitle}>Assessments</Text>
-                          <TouchableOpacity onPress={() => { setSelectedCourse(c); setShowAssessModal(true); }}>
-                            <Text style={styles.addBtn}>+ Add Mark</Text>
-                          </TouchableOpacity>
-                        </View>
-                        {c.assessments?.length === 0 && (
-                          <Text style={styles.noAssess}>No marks added yet</Text>
-                        )}
-                        {c.assessments?.map(a => (
-                          <View key={a.id} style={styles.assessRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.assessName}>{a.name}</Text>
-                              <Text style={styles.assessWeight}>Weight: {a.weight}%</Text>
-                            </View>
-                            <Text style={styles.assessScore}>
-                              {a.score !== null ? `${a.score}/${a.max_score}` : '—'}
-                            </Text>
-                            <TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteAssessment(a.id)}>
-                              <Ionicons name="trash-outline" size={15} color={Colors.accent3} />
-                            </TouchableOpacity>
-                          </View>
-                        ))}
-                      </>
+                    {/* Assessments — always visible */}
+                    <View style={styles.assessHeader}>
+                      <Text style={styles.assessTitle}>Assessments</Text>
+                      <TouchableOpacity onPress={() => { setSelectedCourse(c); setShowAssessModal(true); }}>
+                        <Text style={styles.addBtn}>+ Add Mark</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {c.assessments?.length === 0 && (
+                      <Text style={styles.noAssess}>No marks added yet</Text>
                     )}
+                    {c.assessments?.map(a => (
+                      <View key={a.id} style={styles.assessRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.assessName}>{a.name}</Text>
+                          <Text style={styles.assessWeight}>Weight: {a.weight}%</Text>
+                        </View>
+                        <Text style={styles.assessScore}>
+                          {a.score !== null ? `${a.score}/${a.max_score}` : '—'}
+                        </Text>
+                        <TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteAssessment(a.id)}>
+                          <Ionicons name="trash-outline" size={15} color={Colors.accent3} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                    {c.required && (
+                      <View style={styles.requiredBox}>
+                        <Text style={styles.requiredLabel}>{c.required.remainingWeight}% weight remaining</Text>
+                        {c.required.needed <= 0 ? (
+                          <Text style={styles.requiredSecured}>Already secured {c.required.grade}!</Text>
+                        ) : (
+                          <Text style={styles.requiredText}>
+                            {'Need '}
+                            <Text style={styles.requiredNum}>{c.required.needed}%</Text>
+                            {' in remaining assessments to achieve '}
+                            <Text style={styles.requiredGrade}>{c.required.grade}</Text>
+                          </Text>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Final grade override — always visible */}
+                    <View style={styles.finalGradeSection}>
+                      <Text style={styles.assessTitle}>Final Grade Override</Text>
+                      <Text style={styles.finalGradeHint}>
+                        {c.direct_grade ? 'Tap the active grade to clear it.' : 'Set your known final grade (overrides assessment calculation).'}
+                      </Text>
+                      <View style={styles.gradePicker}>
+                        {GRADES.map(g => (
+                          <TouchableOpacity
+                            key={g}
+                            style={[styles.gradeBtn, c.direct_grade === g && styles.gradeBtnActive]}
+                            onPress={() => handleSetFinalGrade(c.id, g, c.direct_grade)}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={[styles.gradeBtnText, c.direct_grade === g && styles.gradeBtnTextActive]}>{g}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
                     <TouchableOpacity style={styles.deleteCourseBtn} onPress={() => handleDeleteCourse(c.id)}>
                       <Text style={styles.deleteCourseBtnText}>Delete Course</Text>
                     </TouchableOpacity>
@@ -445,6 +486,19 @@ const styles = StyleSheet.create({
   modeBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   modeBtnText: { fontSize: 12, fontWeight: '700', color: Colors.muted },
   modeBtnTextActive: { color: 'white' },
+
+  finalGradeSection: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: Colors.border },
+  finalGradeHint: { fontSize: 11, color: Colors.muted, marginTop: 4, marginBottom: 10 },
+
+  requiredBox: {
+    marginTop: 10, borderRadius: 10, padding: 12,
+    backgroundColor: `${Colors.accent}12`, borderWidth: 1, borderColor: `${Colors.accent}30`,
+  },
+  requiredLabel: { fontSize: 10, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
+  requiredText: { fontSize: 13, color: Colors.text, lineHeight: 20 },
+  requiredNum: { fontWeight: '800', color: Colors.accent },
+  requiredGrade: { fontWeight: '800', color: Colors.accent2 },
+  requiredSecured: { fontSize: 13, fontWeight: '700', color: Colors.accent4 },
 
   gradePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   gradeBtn: {
